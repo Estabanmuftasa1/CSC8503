@@ -6,6 +6,8 @@
 #include "State.h"
 #include "GameServer.h"
 #include "GameClient.h"
+#include "NavigationPath.h"
+#include "NavigationMesh.h"
 
 namespace NCL {
 	class Controller;
@@ -168,31 +170,46 @@ namespace NCL {
 			bool IsPlayerInEndZone() const;
 
 
-			//enemy ai
-			float enemyNetAccum = 0.0f;
-			struct EnemyController {
-				int netID = -1;                // <-- add this
+			NavigationMesh* navMesh = nullptr;
 
+
+			//enemy ai
+			struct EnemyController {
+				int netID = 0;
 				GameObject* enemy = nullptr;
-				StateMachine* sm = nullptr;
 
 				std::vector<Vector3> patrolPoints;
 				int patrolIndex = 0;
 
-				float patrolForce = 15.0f;
-				float chaseForce = 23.0f;
+				StateMachine* sm = nullptr;
 
-				float waypointRadius = 15.0f;
-				float detectRadius = 100.0f;
-				float loseRadius = 120.0f;
-				float killRadius = 7.0f;
+				float patrolForce = 15.0f;
+				float chaseForce = 20.0f;
+
+				float waypointRadius = 8.0f;
+				float detectRadius = 80.0f;
+				float loseRadius = 110.0f;
+				float killRadius = 10.0f;
+
+				// --- A* path following state ---
+				NavigationPath path;          // queued waypoints
+				Vector3 currentWaypoint;      // current target point
+				bool hasPath = false;
+
+				float repathTimer = 0.0f;     // countdown
+				Vector3 lastGoal;             // last requested goal
 			};
+
 
 
 			std::vector<EnemyController*> enemies;
 
 			void InitEnemies();
 			void UpdateEnemies(float dt);
+
+			bool RepathTo(EnemyController& e, const Vector3& goal);
+			bool FollowPath(EnemyController& e, float moveForce);
+
 
 			void EnemyPatrol(EnemyController& e, float dt);
 			void EnemyChase(EnemyController& e, float dt);

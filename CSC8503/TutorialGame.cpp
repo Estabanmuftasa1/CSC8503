@@ -34,6 +34,7 @@
 
 
 
+
 using namespace NCL;
 using namespace CSC8503;
 
@@ -139,7 +140,7 @@ void TutorialGame::InitWorld() {
 	enemies.clear();
 
 
-	localPlayer = AddPlayerToWorld(Vector3(-170, 5, -170));
+	localPlayer = AddPlayerToWorld(Vector3(0, 5, 0));
 	player = localPlayer;
 	remotePlayer = AddPlayerToWorld(Vector3(-160, 5, -160));
 	if (auto* p = remotePlayer->GetPhysicsObject()) {
@@ -211,6 +212,15 @@ void TutorialGame::InitWorld() {
 	endZoneVisual = AddEndZoneVisual(endZonePos, endZoneHalf);
 
 	pickupItems.clear();
+
+	if (navMesh) {
+		delete navMesh;
+		navMesh = nullptr;
+	}
+	navMesh = new NavigationMesh("generated.navmesh");
+	std::cout << "[NAV] loaded navmesh\n";
+
+
 
 	const int numPickups = 15;
 	const float spawnY = 5.0f;
@@ -849,7 +859,7 @@ void TutorialGame::InitEnemies() {
 
 	auto* e = new EnemyController();
 	e->netID = 0;
-	e->enemy = AddEnemyToWorld(Vector3(-60, 5, -60));
+	e->enemy = AddEnemyToWorld(Vector3(10, 5, 10));
 	e->patrolPoints = {
 		Vector3(-60, 5, -60),
 		Vector3(20, 5, -60),
@@ -913,6 +923,8 @@ void TutorialGame::UpdateEnemies(float dt) {
 
 
 void TutorialGame::EnemyPatrol(EnemyController& e, float dt) {
+
+	Debug::Print("STATE: PATROL", Vector2(5, 65));
 	if (e.patrolPoints.empty()) return;
 
 	Vector3 enemyPos = e.enemy->GetTransform().GetPosition();
@@ -937,21 +949,37 @@ void TutorialGame::EnemyPatrol(EnemyController& e, float dt) {
 }
 
 void TutorialGame::EnemyChase(EnemyController& e, float dt) {
-	Vector3 enemyPos = e.enemy->GetTransform().GetPosition();
-	Vector3 playerPos = player->GetTransform().GetPosition();
+	Debug::Print("STATE: CHASE", Vector2(5, 65));
+	if (!player || !e.enemy) return;
 
-	Vector3 d = playerPos - enemyPos;
-	d.y = 0.0f;
+	Vector3 goal = player->GetTransform().GetPosition();
 
-	d = Vector::Normalise(d);
-
-	if (auto* phys = e.enemy->GetPhysicsObject()) {
-		phys->AddForce(d * e.chaseForce);
+	// Repath sometimes (not every frame)
+	e.repathTimer -= dt;
+	if (!e.hasPath || e.repathTimer <= 0.0f) {
+		RepathTo(e, goal);
+		e.repathTimer = 0.25f; // 4 times/sec
 	}
 
+	// Follow A* waypoints (fallback if no path)
+	if (!FollowPath(e, e.chaseForce)) {
+		// Fallback: old behaviour, so enemy still "does something"
+		Vector3 enemyPos = e.enemy->GetTransform().GetPosition();
+		Vector3 d = goal - enemyPos;
+		d.y = 0.0f;
+		if (Vector::Length(d) > 0.01f) {
+			d = Vector::Normalise(d);
+			if (auto* phys = e.enemy->GetPhysicsObject()) {
+				phys->AddForce(d * e.chaseForce);
+			}
+		}
+	}
 }
 
+
 bool TutorialGame::EnemyShouldChase(const EnemyController& e) const {
+	
+	return true; // temp
 	Vector3 ep = e.enemy->GetTransform().GetPosition();
 	Vector3 pp = player->GetTransform().GetPosition();
 
@@ -966,6 +994,8 @@ bool TutorialGame::EnemyShouldChase(const EnemyController& e) const {
 
 
 bool TutorialGame::EnemyShouldPatrol(const EnemyController& e) const {
+
+	return false;// temp
 	Vector3 ep = e.enemy->GetTransform().GetPosition();
 	Vector3 pp = player->GetTransform().GetPosition();
 
@@ -1038,6 +1068,74 @@ Vector3 TutorialGame::AvoidWalls(GameObject& enemy, const Vector3& desiredDir) c
 	steer.y = 0.0f;
 	return Vector::Normalise(steer);
 }
+
+bool TutorialGame::RepathTo(EnemyController& e, const Vector3& goal) {
+	if (!navMesh || !e.enemy) {
+		Debug::Print("REPATH FAIL: null", Vector2(5, 70));
+		e.hasPath = false;
+		return false;
+	}
+
+	NavigationPath newPath;
+	Vector3 start = e.enemy->GetTransform().GetPosition();
+
+	bool sOK = navMesh->DebugHasTriForPosition(start);
+	bool gOK = navMesh->DebugHasTriForPosition(goal);
+	Debug::Print(std::string("NAV start=") + (sOK ? "OK" : "NULL"), Vector2(5, 60));
+	Debug::Print(std::string("NAV goal=") + (gOK ? "OK" : "NULL"), Vector2(5, 62));
+
+
+	if (!navMesh->FindPath(start, goal, newPath)) {
+		Debug::Print("REPATH FAIL: FindPath", Vector2(5, 70));
+		e.hasPath = false;
+		return false;
+	}
+
+	e.path = newPath;
+
+	// This method name must match YOUR NavigationPath.
+	// If this line fails to compile, paste NavigationPath.h and I'll adjust.
+	if (!e.path.PopWaypoint(e.currentWaypoint)) {
+		Debug::Print("REPATH FAIL: PopWaypoint", Vector2(5, 70));
+		e.hasPath = false;
+		return false;
+	}
+
+	Debug::Print("REPATH OK", Vector2(5, 70));
+	e.hasPath = true;
+	e.lastGoal = goal;
+	return true;
+}
+
+bool TutorialGame::FollowPath(EnemyController& e, float moveForce) {
+
+	if (!e.hasPath || !e.enemy) return false;
+
+	Vector3 enemyPos = e.enemy->GetTransform().GetPosition();
+	Vector3 toWP = e.currentWaypoint - enemyPos;
+	toWP.y = 0.0f;
+
+	const float reachDist = 4.0f; // tweak
+	if (Vector::Dot(toWP, toWP) <= reachDist * reachDist) {
+		// Advance to next waypoint
+		if (e.path.PopWaypoint(e.currentWaypoint)) { // method name must match
+			return true;
+		}
+		e.hasPath = false;
+		return false;
+	}
+
+	Vector3 dir = Vector::Normalise(toWP);
+	Debug::DrawLine(enemyPos, e.currentWaypoint, Vector4(1, 1, 0, 1), 0.1f);
+	Debug::Print("FOLLOWPATH RUNNING", Vector2(5, 55));
+
+	if (auto* phys = e.enemy->GetPhysicsObject()) {
+		phys->AddForce(dir * moveForce);
+	}
+
+	return true;
+}
+
 
 void TutorialGame::UpdatePlaying(float dt) {
 

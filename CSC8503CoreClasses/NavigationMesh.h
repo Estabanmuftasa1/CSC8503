@@ -12,6 +12,8 @@ namespace NCL {
 			~NavigationMesh();
 
 			bool FindPath(const Vector3& from, const Vector3& to, NavigationPath& outPath) override;
+			bool DebugHasTriForPosition(const Vector3& pos) const;
+
 		
 		protected:
 			struct NavTri {
