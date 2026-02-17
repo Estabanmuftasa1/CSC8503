@@ -954,16 +954,16 @@ void TutorialGame::EnemyChase(EnemyController& e, float dt) {
 
 	Vector3 goal = player->GetTransform().GetPosition();
 
-	// Repath sometimes (not every frame)
+	// repath not every frame
 	e.repathTimer -= dt;
 	if (!e.hasPath || e.repathTimer <= 0.0f) {
 		RepathTo(e, goal);
 		e.repathTimer = 0.25f; // 4 times/sec
 	}
 
-	// Follow A* waypoints (fallback if no path)
 	if (!FollowPath(e, e.chaseForce)) {
-		// Fallback: old behaviour, so enemy still "does something"
+		// old behaviour cause sometimes enemy gets too close
+		// to the walls and isnt within navmesh anymore
 		Vector3 enemyPos = e.enemy->GetTransform().GetPosition();
 		Vector3 d = goal - enemyPos;
 		d.y = 0.0f;
@@ -1093,8 +1093,7 @@ bool TutorialGame::RepathTo(EnemyController& e, const Vector3& goal) {
 
 	e.path = newPath;
 
-	// This method name must match YOUR NavigationPath.
-	// If this line fails to compile, paste NavigationPath.h and I'll adjust.
+
 	if (!e.path.PopWaypoint(e.currentWaypoint)) {
 		Debug::Print("REPATH FAIL: PopWaypoint", Vector2(5, 70));
 		e.hasPath = false;

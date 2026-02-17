@@ -102,8 +102,6 @@ bool NavigationMesh::FindPath(const Vector3& from, const Vector3& to, Navigation
 			<< " to(" << to.x << "," << to.y << "," << to.z << ")\n";
 		return false;
 	}
-	if (!start) Debug::Print("NAV: start tri null", Vector2(5, 75));
-	if (!end)   Debug::Print("NAV: end tri null", Vector2(5, 80));
 
 
 	//straight line is ok
@@ -243,7 +241,7 @@ bool NavigationMesh::FindPath(const Vector3& from, const Vector3& to, Navigation
 	return false; // cannoit find path
 }
 
-// this probably doesnt work for multiple levels, fix for later, at least 2d is working now
+// should work for 3d levels as long as good navmesh exists
 
 const NavigationMesh::NavTri* NavigationMesh::GetTriForPosition(const Vector3& pos) const {
 	for (const NavTri& t : allTris) {

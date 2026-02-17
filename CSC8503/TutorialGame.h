@@ -183,7 +183,7 @@ namespace NCL {
 
 				StateMachine* sm = nullptr;
 
-				float patrolForce = 15.0f;
+				float patrolForce = 40.0f;
 				float chaseForce = 20.0f;
 
 				float waypointRadius = 8.0f;
