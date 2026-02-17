@@ -11,7 +11,7 @@
 using namespace NCL;
 using namespace CSC8503;
 using namespace std;
-
+//for the commit
 NavigationMesh::NavigationMesh()
 {
 }
